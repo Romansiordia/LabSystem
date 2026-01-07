@@ -1,0 +1,5 @@
+{
+  "name": "LabSys ",
+  "description": "A comprehensive web application to manage a quality control livestock analysis laboratory. It handles databases for clients, analyses, costs, technicians, and provides statistical insights.",
+  "requestFramePermissions": []
+}
