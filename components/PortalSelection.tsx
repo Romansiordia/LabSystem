@@ -26,6 +26,15 @@ const PortalSelection: React.FC<PortalSelectionProps> = ({ setAppMode }) => {
                         >
                             Client Portal
                         </button>
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem('googleScriptUrl');
+                                window.location.reload();
+                            }}
+                            className="w-full text-sm py-2 px-4 text-gray-500 hover:text-primary transition-colors"
+                        >
+                            Configure System URL
+                        </button>
                     </div>
                 </div>
             </div>

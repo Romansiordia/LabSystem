@@ -1,0 +1,141 @@
+
+import React, { useState } from 'react';
+import { Product } from '../types';
+import Table from './ui/Table';
+import Modal from './ui/Modal';
+import { PlusIcon } from './icons/Icons';
+
+const initialFormState: Omit<Product, 'id'> = {
+    name: '',
+};
+
+interface ProductManagementProps {
+    products: Product[];
+    reloadData: () => Promise<void>;
+}
+
+const ProductManagement: React.FC<ProductManagementProps> = ({ products, reloadData }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [formData, setFormData] = useState(initialFormState);
+    const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+    const [submitError, setSubmitError] = useState<string | null>(null);
+
+    const handleModalClose = () => {
+        setIsModalOpen(false);
+        setFormData(initialFormState);
+        setSubmitStatus('idle');
+        setSubmitError(null);
+    }
+      
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    }
+    
+    const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if(!formData.name) {
+            alert("Please fill in the product name.");
+            return;
+        }
+
+        setSubmitStatus('submitting');
+        setSubmitError(null);
+        
+        const newProduct: Product = {
+          id: `prod${Date.now()}`,
+          ...formData
+        };
+
+        const googleScriptUrl = localStorage.getItem('googleScriptUrl');
+        if (!googleScriptUrl) {
+            setSubmitError('Google Sheets URL not configured. Please set it in Settings.');
+            setSubmitStatus('error');
+            return;
+        }
+
+        try {
+            const requestPayload = { 
+                action: 'create', 
+                targetSheet: 'Products', 
+                payload: newProduct 
+            };
+            const postData = new URLSearchParams();
+            postData.append('payload', JSON.stringify(requestPayload));
+            
+            const response = await fetch(googleScriptUrl, {
+                method: 'POST',
+                body: postData,
+            });
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                await reloadData();
+                setSubmitStatus('success');
+                setTimeout(() => handleModalClose(), 1000);
+            } else {
+                throw new Error(result.message || 'Unknown error from Google Script.');
+            }
+        } catch(error) {
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            setSubmitError(`Failed to save product: ${errorMessage}. Check sheet name and script permissions.`);
+            setSubmitStatus('error');
+        }
+    }
+
+    const headers = ['ID', 'Product Name'];
+    const dataRows = products.map(p => [p.id, p.name]);
+    const inputStyle = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
+
+    const getButtonText = () => {
+        switch(submitStatus) {
+            case 'submitting': return 'Saving...';
+            case 'success': return 'Saved!';
+            case 'error': return 'Retry Save';
+            default: return 'Save Product';
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold text-gray-800">Product Management</h1>
+                <button onClick={() => setIsModalOpen(true)} className="bg-primary text-white hover:bg-secondary font-bold py-2 px-4 rounded-lg inline-flex items-center transition-colors">
+                    <PlusIcon />
+                    <span className="ml-2">Add Product</span>
+                </button>
+            </div>
+            <Table headers={headers} data={dataRows} />
+            {isModalOpen && (
+                <Modal onClose={handleModalClose} title="Add New Product">
+                    <form onSubmit={handleFormSubmit}>
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
+                            <input type="text" name="name" id="name" value={formData.name} onChange={handleFormChange} required className={inputStyle} />
+                          </div>
+                          {submitStatus === 'error' && submitError && (
+                            <div className="text-xs text-center p-2 bg-red-50 text-red-700 rounded-md">{submitError}</div>
+                          )}
+                        </div>
+                        <div className="flex justify-end p-4 bg-gray-50 border-t">
+                            <button type="button" onClick={handleModalClose} className="bg-gray-200 text-gray-800 hover:bg-gray-300 font-bold py-2 px-4 rounded-lg transition-colors mr-2">
+                                Cancel
+                            </button>
+                            <button type="submit" className={`font-bold py-2 px-4 rounded-lg transition-colors text-white ${
+                                submitStatus === 'submitting' ? 'bg-gray-400 cursor-not-allowed' :
+                                submitStatus === 'success' ? 'bg-green-600' :
+                                submitStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
+                                'bg-primary hover:bg-secondary'
+                            }`} disabled={submitStatus === 'submitting' || submitStatus === 'success'}>
+                                {getButtonText()}
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+export default ProductManagement;

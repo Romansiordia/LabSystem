@@ -1,5 +1,5 @@
 
-export type View = 'dashboard' | 'clients' | 'technicians' | 'analyses' | 'settings' | 'newAnalysis' | 'analysisCosts' | 'clientPortal';
+export type View = 'dashboard' | 'clients' | 'technicians' | 'analyses' | 'settings' | 'newAnalysis' | 'analysisCosts' | 'clientPortal' | 'products';
 
 export interface Client {
   id: string;
@@ -37,7 +37,7 @@ export interface Supplier {
     product: string;
 }
 
-export interface ProductType {
+export interface Product {
     id: string;
     name: string;
 }

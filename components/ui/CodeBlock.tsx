@@ -18,20 +18,35 @@ const ADMIN_PASSWORD = "LabSys2024!";
 
 
 function doGet(e) {
+  // Handle manual execution or empty parameters gracefully
+  if (!e || !e.parameter) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "info", 
+      message: "LabSys Apps Script is active. Please access it through the web application.",
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("Spreadsheet not found. Ensure the script is bound to a Google Sheet.");
+
     const clientId = e.parameter.clientId;
     let response;
 
     if (clientId) {
       // If a clientId is provided, return only data relevant to that client.
       response = {
+        status: "success",
         analysisResults: getSheetDataAsObjects("AnalysisResults", clientId)
       };
     } else {
       // Otherwise, return all data for the admin portal.
       response = {
+        status: "success",
         clients: getSheetDataAsObjects("Clients"),
         technicians: getSheetDataAsObjects("Technicians"),
+        products: getSheetDataAsObjects("Products"),
         analysisTypes: getSheetDataAsObjects("AnalysisTypes"),
         analysisCosts: getSheetDataAsObjects("AnalysisCosts"),
         analysisResults: getSheetDataAsObjects("AnalysisResults")
@@ -42,29 +57,46 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     Logger.log("doGet Error: " + error.stack);
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "doGet Error: " + error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "error", 
+      message: "doGet Error: " + error.message 
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 
 function doPost(e) {
   try {
-    if (!e || !e.parameter || !e.parameter.payload) throw new Error("Invalid POST: 'payload' missing.");
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) throw new Error("Spreadsheet not found. Ensure the script is bound to a Google Sheet.");
+
+    if (!e || !e.parameter || !e.parameter.payload) {
+      throw new Error("Invalid POST request: 'payload' parameter is missing.");
+    }
+
     const request = JSON.parse(e.parameter.payload);
     const { action, targetSheet, payload } = request;
 
     // Handle non-sheet actions first
-    if (action === 'testConnection') return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Connection successful." })).setMimeType(ContentService.MimeType.JSON);
+    if (action === 'testConnection') {
+      return ContentService.createTextOutput(JSON.stringify({ 
+        status: "success", 
+        message: "Connection successful." 
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     if (action === 'authenticateClient') return handleClientAuthentication(payload);
     if (action === 'authenticateAdmin') return handleAdminAuthentication(payload);
 
-
     // All actions below require a valid sheet
-    if (!action || !targetSheet || !payload) throw new Error("Request requires 'action', 'targetSheet', 'payload'.");
+    if (!action || !targetSheet || !payload) {
+      throw new Error("Request requires 'action', 'targetSheet', and 'payload'.");
+    }
 
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(targetSheet);
-    if (!sheet) throw new Error("Sheet '" + targetSheet + "' not found. Check name (case-sensitive).");
+    const sheet = ss.getSheetByName(targetSheet);
+    if (!sheet) {
+      throw new Error("Sheet '" + targetSheet + "' not found. Please check that the tab name matches exactly (case-sensitive).");
+    }
     
     switch (action) {
       case 'delete':
@@ -76,9 +108,12 @@ function doPost(e) {
         throw new Error("Unknown action: '" + action + "'.");
     }
   } catch (error) {
-    Logger.log("doPost Error: " + error.stack + " | Payload: " + (e.parameter ? e.parameter.payload : "N/A"));
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    const payloadInfo = (e && e.parameter && e.parameter.payload) ? e.parameter.payload : "N/A";
+    Logger.log("doPost Error: " + error.stack + " | Payload: " + payloadInfo);
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "error", 
+      message: error.message 
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -131,14 +166,23 @@ function handleClientAuthentication(payload) {
 
 
 function handleUpsert(data, sheet) {
-  Logger.log("handleUpsert for sheet '" + sheet.getName() + "'. ID: " + data.id + ".");
+  const sheetName = sheet.getName();
+  Logger.log("handleUpsert for sheet '" + sheetName + "'. ID: " + data.id + ".");
+  
   if (!data.id) throw new Error("Upsert payload needs 'id'.");
-  if (sheet.getLastRow() === 0) throw new Error("Cannot save to empty sheet. Add headers.");
+  
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn === 0) {
+    throw new Error("Sheet '" + sheetName + "' is empty. Please add headers (id, name, etc.) to the first row.");
+  }
 
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const headers = sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map(h => String(h).trim());
   const lowerCaseHeaders = headers.map(h => h.toLowerCase());
   const idColumnIndex = lowerCaseHeaders.indexOf('id');
-  if (idColumnIndex === -1) throw new Error("'id' column not found in sheet '" + sheet.getName() + "'.");
+  
+  if (idColumnIndex === -1) {
+    throw new Error("'id' column not found in sheet '" + sheetName + "'. Please ensure the first row has an 'id' header.");
+  }
   
   const dataKeys = Object.keys(data).reduce((acc, key) => { acc[key.toLowerCase()] = key; return acc; }, {});
 

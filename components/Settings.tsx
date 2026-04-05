@@ -40,7 +40,14 @@ const Settings: React.FC<SettingsProps> = ({ reloadData, isInitialSetup = false,
             const getResponse = await fetch(googleScriptUrl);
             if (!getResponse.ok) throw new Error(`GET Test Failed: Status ${getResponse.status}`);
             const getResult = await getResponse.json();
-            if (!getResult || typeof getResult !== 'object' || !getResult.clients || !getResult.analysisTypes) throw new Error(`GET Test Failed: Invalid JSON response. Missing required data like clients or analysisTypes.`);
+            
+            if (getResult.status === 'error') {
+                throw new Error(`GET Test Failed: ${getResult.message}`);
+            }
+            
+            if (!getResult || typeof getResult !== 'object' || !getResult.clients || !getResult.analysisTypes || !getResult.products) {
+                throw new Error(`GET Test Failed: Invalid JSON response. Missing required data like clients, analysisTypes, or products.`);
+            }
 
             // Test 2: POST request using URLSearchParams to avoid CORS preflight
             const postData = new URLSearchParams();
@@ -103,11 +110,12 @@ const Settings: React.FC<SettingsProps> = ({ reloadData, isInitialSetup = false,
                     <p>Follow these steps to get your Google Sheet ready:</p>
                     <ol className="list-decimal pl-5 space-y-2">
                         <li>Create a new Google Sheet.</li>
-                        <li>Create **six** tabs named exactly: <strong>Clients</strong>, <strong>Technicians</strong>, <strong>AnalysisTypes</strong>, <strong>AnalysisCosts</strong>, <strong>AnalysisResults</strong>, and now <strong>ClientLogins</strong>.</li>
+                        <li>Create **seven** tabs named exactly: <strong>Clients</strong>, <strong>Technicians</strong>, <strong>Products</strong>, <strong>AnalysisTypes</strong>, <strong>AnalysisCosts</strong>, <strong>AnalysisResults</strong>, and <strong>ClientLogins</strong>.</li>
                         <li>In the first row of each sheet, add the required headers.
                             <ul className="list-disc pl-5 mt-1 space-y-1">
                                 <li><strong>Clients:</strong> id, name, contactPerson, email, phone</li>
                                 <li><strong>Technicians:</strong> id, name, specialty, hireDate</li>
+                                <li><strong>Products:</strong> id, name</li>
                                 <li><strong>AnalysisTypes:</strong> id, testName, units, resultType (use 'numeric' or 'text')</li>
                                 <li><strong>AnalysisCosts:</strong> id, testName, cost, method</li>
                                 <li><strong>AnalysisResults:</strong> Headers for fixed data (id, folio, etc.) plus one column for each possible test name (e.g., 'Protein', 'Fat').</li>

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { View } from '../types';
-import { DashboardIcon, ClientIcon, TechnicianIcon, AnalysisIcon, SettingsIcon, NewAnalysisIcon, AnalysisCostIcon } from './icons/Icons';
+import { DashboardIcon, ClientIcon, TechnicianIcon, AnalysisIcon, SettingsIcon, NewAnalysisIcon, AnalysisCostIcon, ProductIcon } from './icons/Icons';
 
 const LogoutIcon: React.FC = () => (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -18,6 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, onLogout }
     { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
     { id: 'clients', label: 'Clients', icon: <ClientIcon /> },
     { id: 'technicians', label: 'Technicians', icon: <TechnicianIcon /> },
+    { id: 'products', label: 'Products', icon: <ProductIcon /> },
     { id: 'newAnalysis', label: 'New Analysis', icon: <NewAnalysisIcon /> },
     { id: 'analyses', label: 'Analyses', icon: <AnalysisIcon /> },
     { id: 'analysisCosts', label: 'Analysis Costs', icon: <AnalysisCostIcon /> },

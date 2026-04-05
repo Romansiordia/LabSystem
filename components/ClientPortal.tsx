@@ -5,6 +5,8 @@ import autoTable from 'jspdf-autotable';
 import { LoggedInClient, Analysis } from '../types';
 import Table from './ui/Table';
 import Loader from './ui/Loader';
+import StatusBadge from './ui/StatusBadge';
+import TestProgress from './ui/TestProgress';
 
 interface ClientPortalProps {
     clientInfo: LoggedInClient;
@@ -128,14 +130,23 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientInfo, onLogout }) => 
         doc.save(`report-${analysis.folio}.pdf`);
     };
 
-    const headers = ['Folio', 'Reception', 'Delivery', 'Sample', 'Product', 'Status'];
+    const allTestNames = Array.from(new Set(analyses.flatMap(a => a.requestedTests || []))).sort();
+    const headers = ['Folio', 'Reception', 'Delivery', 'Sample', 'Product', 'Status', ...allTestNames];
     const dataRows = analyses.map(a => [
         a.folio,
         a.receptionDate,
         a.deliveryDate ?? 'Pending',
         a.sampleName,
         a.product,
-        a.status
+        <StatusBadge key={`status-${a.id}`} status={a.status || 'Received'} />,
+        ...allTestNames.map(testName => {
+            const isRequested = (a.requestedTests || []).includes(testName);
+            if (!isRequested) return <span className="text-gray-300">-</span>;
+            const result = (a.results || []).find(r => r.testName === testName);
+            const hasResult = result && result.value !== null && result.value !== '';
+            if (hasResult) return <span className="font-medium text-blue-700">{result.value}</span>;
+            return <span className="text-red-600 font-bold text-xs">Pendiente</span>;
+        })
     ]);
 
     return (
@@ -162,6 +173,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientInfo, onLogout }) => 
                         headers={headers} 
                         data={dataRows}
                         onPrint={(index) => handlePrintReport(analyses[index])}
+                        actionsIndex={6}
                     />
                 )}
             </main>

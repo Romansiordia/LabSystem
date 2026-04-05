@@ -16,9 +16,16 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, setAppMode }) =
         setLoading(true);
         setError(null);
 
+        // Master password fallback for emergency access/initial setup
+        if (password === 'LabSys2024!') {
+            onLoginSuccess();
+            setLoading(false);
+            return;
+        }
+
         const googleScriptUrl = localStorage.getItem('googleScriptUrl');
         if (!googleScriptUrl) {
-            setError('System not configured. Missing Google Script URL.');
+            setError('System not configured. Missing Google Script URL. Use master password for emergency access.');
             setLoading(false);
             return;
         }
@@ -84,9 +91,18 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, setAppMode }) =
                         </div>
                     </form>
                 </div>
-                <div className="text-center mt-6">
-                    <button onClick={() => setAppMode('login')} className="text-sm text-gray-600 hover:text-primary transition-colors">
+                <div className="text-center mt-6 space-y-2">
+                    <button onClick={() => setAppMode('login')} className="block w-full text-sm text-gray-600 hover:text-primary transition-colors">
                         &larr; Back to portal selection
+                    </button>
+                    <button 
+                        onClick={() => {
+                            localStorage.removeItem('googleScriptUrl');
+                            window.location.reload();
+                        }} 
+                        className="block w-full text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                        Reset System URL
                     </button>
                 </div>
             </div>

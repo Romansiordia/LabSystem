@@ -5,6 +5,8 @@ import autoTable from 'jspdf-autotable';
 import { Analysis, Client, Technician, View, AnalysisStatus, AnalysisCost, AnalysisType, AnalysisResultItem } from '../types';
 import Table from './ui/Table';
 import Modal from './ui/Modal';
+import StatusBadge from './ui/StatusBadge';
+import TestProgress from './ui/TestProgress';
 import { DownloadIcon, SheetIcon, PlusIcon } from './icons/Icons';
 
 const statusOptions: AnalysisStatus[] = ['Received', 'In Progress', 'Completed', 'Cancelled'];
@@ -31,15 +33,33 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [clientSearchTerm, setClientSearchTerm] = useState('');
+    const [dateSearchTerm, setDateSearchTerm] = useState('');
+    const [sampleSearchTerm, setSampleSearchTerm] = useState('');
+    const [productSearchTerm, setProductSearchTerm] = useState('');
+    const [technicianSearchTerm, setTechnicianSearchTerm] = useState('');
 
-    const filteredAnalyses = analyses
+    const filteredAnalyses = (analyses || [])
         .filter(analysis =>
             String(analysis.folio || '').toLowerCase().includes(searchTerm.toLowerCase())
         )
         .filter(analysis => {
             if (!clientSearchTerm) return true;
-            const client = clients.find(c => c.id === analysis.clientId);
+            const client = (clients || []).find(c => c && c.id === analysis.clientId);
             return client ? client.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) : false;
+        })
+        .filter(analysis => 
+            String(analysis.receptionDate || '').toLowerCase().includes(dateSearchTerm.toLowerCase())
+        )
+        .filter(analysis => 
+            String(analysis.sampleName || '').toLowerCase().includes(sampleSearchTerm.toLowerCase())
+        )
+        .filter(analysis => 
+            String(analysis.product || '').toLowerCase().includes(productSearchTerm.toLowerCase())
+        )
+        .filter(analysis => {
+            if (!technicianSearchTerm) return true;
+            const tech = (technicians || []).find(t => t && t.id === analysis.technicianId);
+            return tech ? tech.name.toLowerCase().includes(technicianSearchTerm.toLowerCase()) : false;
         });
 
     const handleEdit = (index: number) => {
@@ -200,35 +220,76 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
         }
     }
     
-    const headers = ['Folio', 'Reception', 'Delivery', 'Sample', 'Product', 'Client', 'Technician', 'Priority', 'Status'];
-    const dataRows = filteredAnalyses.map(a => [
-        a.folio, 
-        a.receptionDate,
+    const activeTestNames = Array.from(new Set((filteredAnalyses || []).flatMap(a => a.requestedTests || []))).sort();
+
+    const headers = [
+        'Folio', 'Reception', 'Delivery', 'Sample', 'Product', 'Client', 'Technician', 'Priority', 'Status',
+        ...activeTestNames
+    ];
+
+    const dataRows = (filteredAnalyses || []).map(a => [
+        a.folio || 'N/A', 
+        a.receptionDate || 'N/A',
         a.deliveryDate ?? 'N/A',
-        a.sampleName,
-        a.product,
+        a.sampleName || 'N/A',
+        a.product || 'N/A',
         clients.find(c => c.id === a.clientId)?.name ?? 'Unknown',
         technicians.find(t => t.id === a.technicianId)?.name ?? 'Unknown',
-        a.priority,
-        a.status,
+        a.priority || 'Normal',
+        <StatusBadge key={`status-${a.id}`} status={a.status || 'Received'} />,
+        ...activeTestNames.map(testName => {
+            const isRequested = (a.requestedTests || []).includes(testName);
+            if (!isRequested) return <span className="text-gray-300">-</span>;
+            
+            const result = (a.results || []).find(r => r.testName === testName);
+            const hasResult = result && result.value !== null && result.value !== '';
+            
+            if (hasResult) {
+                return <span className="font-medium text-blue-700">{result.value}</span>;
+            }
+            
+            return <span className="text-red-600 font-bold text-xs">Pendiente</span>;
+        })
     ]);
     
     const handleDownloadPdf = () => {
-        const doc = new jsPDF();
+        const doc = new jsPDF({ orientation: 'landscape' });
         doc.text("Analysis Report", 14, 15);
+        const pdfDataRows = (filteredAnalyses || []).map(a => {
+            const testResults = activeTestNames.map(testName => {
+                const isRequested = (a.requestedTests || []).includes(testName);
+                if (!isRequested) return '-';
+                const result = (a.results || []).find(r => r.testName === testName);
+                return result && result.value !== null && result.value !== '' ? String(result.value) : 'Pendiente';
+            });
+
+            return [
+                a.folio || 'N/A', 
+                a.receptionDate || 'N/A',
+                a.deliveryDate ?? 'N/A',
+                a.sampleName || 'N/A',
+                a.product || 'N/A',
+                clients.find(c => c.id === a.clientId)?.name ?? 'Unknown',
+                technicians.find(t => t.id === a.technicianId)?.name ?? 'Unknown',
+                a.priority || 'Normal',
+                a.status || 'Received',
+                ...testResults
+            ];
+        });
         autoTable(doc, {
             head: [headers],
-            body: dataRows,
+            body: pdfDataRows,
             startY: 20,
             theme: 'grid',
+            styles: { fontSize: 7 },
             headStyles: { fillColor: [30, 64, 175] },
         });
         doc.save('analysis-report.pdf');
     };
 
     const handleExportCSV = () => {
-        const allTestNames = [...new Set(analyses.flatMap(a => a.requestedTests))];
-        const csvHeaders = ['Folio', 'Reception Date', 'Delivery Date', 'Sample', 'Product', 'Client', 'Technician', 'Priority', 'Status', 'Cost ($)', ...allTestNames];
+    const allTestNames = [...new Set((analyses || []).flatMap(a => a.requestedTests || []))];
+    const csvHeaders = ['Folio', 'Reception Date', 'Delivery Date', 'Sample', 'Product', 'Client', 'Technician', 'Priority', 'Status', 'Cost ($)', ...allTestNames];
         
         const escapeCsvCell = (cell: any): string => {
             const strCell = String(cell ?? '');
@@ -363,8 +424,19 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
 
     const inputStyle = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     
-    return (
-        <div className="space-y-6">
+    const translateStatus = (status: string) => {
+        switch(status) {
+            case 'Received': return 'Recibido';
+            case 'In Progress': return 'En Proceso';
+            case 'Completed': return 'Completo';
+            case 'Cancelled': return 'Cancelado';
+            default: return status;
+        }
+    };
+
+    try {
+        return (
+            <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-800">Analysis Management</h1>
                 <div className="flex items-center space-x-2">
@@ -381,16 +453,52 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow-md">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <SearchIcon />
                         </span>
                         <input
                             type="text"
-                            placeholder="Search by Folio number..."
+                            placeholder="Folio..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Reception Date..."
+                            value={dateSearchTerm}
+                            onChange={(e) => setDateSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Sample Name..."
+                            value={sampleSearchTerm}
+                            onChange={(e) => setSampleSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Product..."
+                            value={productSearchTerm}
+                            onChange={(e) => setProductSearchTerm(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                     </div>
@@ -400,16 +508,28 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                         </span>
                         <input
                             type="text"
-                            placeholder="Search by Client name..."
+                            placeholder="Client..."
                             value={clientSearchTerm}
                             onChange={(e) => setClientSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                    </div>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <SearchIcon />
+                        </span>
+                        <input
+                            type="text"
+                            placeholder="Technician..."
+                            value={technicianSearchTerm}
+                            onChange={(e) => setTechnicianSearchTerm(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                     </div>
                 </div>
             </div>
 
-            <Table headers={headers} data={dataRows} onEdit={handleEdit} onDelete={handleDelete} onPrint={handlePrint} />
+            <Table headers={headers} data={dataRows} onEdit={handleEdit} onDelete={handleDelete} onPrint={handlePrint} actionsIndex={9} />
             
             {isModalOpen && editingAnalysis && (
                 <Modal onClose={handleCloseModal} title={`Edit Analysis - ${editingAnalysis.folio}`}>
@@ -422,7 +542,7 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                         <div>
                             <label htmlFor="status" className="block text-sm font-medium text-gray-700">Status</label>
                             <select name="status" id="status" value={modalFormData.status} onChange={handleModalFormChange} className={inputStyle}>
-                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                {statusOptions.map(s => <option key={s} value={s}>{translateStatus(s)}</option>)}
                             </select>
                         </div>
                       </div>
@@ -475,7 +595,18 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                 </Modal>
             )}
         </div>
-    );
+        );
+    } catch (error) {
+        console.error('AnalysisManagement render error:', error);
+        return (
+            <div className="p-8 text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                <h2 className="text-xl font-bold mb-2">Error loading analysis list</h2>
+                <p className="text-sm">An error occurred while rendering the analysis management view. Please check the console for details.</p>
+                <p className="mt-4 text-xs font-mono">{error instanceof Error ? error.message : String(error)}</p>
+                <button onClick={() => reloadData()} className="mt-6 bg-red-600 text-white px-4 py-2 rounded-lg font-bold">Retry</button>
+            </div>
+        );
+    }
 };
 
 export default AnalysisManagement;

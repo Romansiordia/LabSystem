@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import ClientManagement from './components/ClientManagement';
@@ -8,12 +8,59 @@ import AnalysisManagement from './components/AnalysisManagement';
 import Settings from './components/Settings';
 import AnalysisRequest from './components/AnalysisRequest';
 import AnalysisCostsManagement from './components/AnalysisCostsManagement';
+import ProductManagement from './components/ProductManagement';
 import ClientPortal from './components/ClientPortal';
 import ClientLogin from './components/ClientLogin';
 import AdminLogin from './components/AdminLogin';
 import PortalSelection from './components/PortalSelection';
 import Loader from './components/ui/Loader';
-import { View, Client, Technician, Analysis, AnalysisCost, AnalysisType, LoggedInClient } from './types';
+import { View, Client, Technician, Analysis, AnalysisCost, AnalysisType, LoggedInClient, Product } from './types';
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-red-600 bg-red-50 border border-red-200 rounded-lg m-4">
+          <h1 className="text-2xl font-bold mb-4">Something went wrong.</h1>
+          <p className="mb-4">The application encountered an unexpected error.</p>
+          <pre className="text-xs bg-white p-4 border rounded overflow-auto max-h-40">
+            {this.state.error?.message}
+          </pre>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-6 bg-red-600 text-white px-4 py-2 rounded-lg font-bold"
+          >
+            Reload Application
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children; 
+  }
+}
 
 const App: React.FC = () => {
     // State for app mode and logged in client/admin
@@ -28,6 +75,7 @@ const App: React.FC = () => {
     const [analyses, setAnalyses] = useState<Analysis[]>([]);
     const [analysisCosts, setAnalysisCosts] = useState<AnalysisCost[]>([]);
     const [analysisTypes, setAnalysisTypes] = useState<AnalysisType[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
 
     // UI State
     const [activeView, setActiveView] = useState<View>('dashboard');
@@ -58,15 +106,16 @@ const App: React.FC = () => {
                  throw new Error(`Script error: ${data.message}`);
             }
             
-            if(!data.clients || !data.technicians || !data.analysisResults || !data.analysisCosts || !data.analysisTypes) {
-                throw new Error("Data from Google Sheet is incomplete. Check if all required sheets (Clients, Technicians, etc.) exist and are not empty.");
+            if(!data.clients || !data.technicians || !data.analysisResults || !data.analysisCosts || !data.analysisTypes || !data.products) {
+                throw new Error("Data from Google Sheet is incomplete. Check if all required sheets (Clients, Technicians, Products, etc.) exist and are not empty.");
             }
 
-            setClients(data.clients);
-            setTechnicians(data.technicians);
-            setAnalyses(data.analysisResults);
-            setAnalysisCosts(data.analysisCosts);
-            setAnalysisTypes(data.analysisTypes);
+            setClients(data.clients || []);
+            setTechnicians(data.technicians || []);
+            setAnalyses(data.analysisResults || []);
+            setAnalysisCosts(data.analysisCosts || []);
+            setAnalysisTypes(data.analysisTypes || []);
+            setProducts(data.products || []);
 
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
@@ -91,7 +140,7 @@ const App: React.FC = () => {
         } else {
             setLoading(false);
         }
-    }, [appMode, isAdminAuthenticated, googleScriptUrl]);
+    }, [appMode, isAdminAuthenticated, googleScriptUrl, activeView]);
     
     const handleClientLoginSuccess = (client: LoggedInClient) => {
         setLoggedInClient(client);
@@ -134,39 +183,47 @@ const App: React.FC = () => {
 
 
     const renderContent = () => {
-        if (loading) {
-            return <Loader message="Loading data from Google Sheets..." />;
-        }
-        if (error && activeView !== 'settings') {
-            return (
-                <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md" role="alert">
-                    <p className="font-bold">Error Loading Data</p>
-                    <p>{error}</p>
-                    <button onClick={() => setActiveView('settings')} className="mt-4 bg-red-500 text-white font-bold py-2 px-4 rounded hover:bg-red-600 transition-colors">
-                        Go to Settings
-                    </button>
-                </div>
-            );
-        }
-        
-        switch (activeView) {
-            case 'dashboard':
-                return <Dashboard analyses={analyses} clients={clients} technicians={technicians} />;
-            case 'clients':
-                return <ClientManagement clients={clients} reloadData={reloadData} />;
-            case 'technicians':
-                return <TechnicianManagement technicians={technicians} reloadData={reloadData} />;
-            case 'newAnalysis':
-                return <AnalysisRequest clients={clients} technicians={technicians} analysisCosts={analysisCosts} reloadData={reloadData} setActiveView={setActiveView} />;
-            case 'analyses':
-                return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} />;
-            case 'analysisCosts':
-                return <AnalysisCostsManagement analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} />;
-            case 'settings':
-                return <Settings reloadData={reloadData} />;
-            default:
-                return <Dashboard analyses={analyses} clients={clients} technicians={technicians} />;
-        }
+        return (
+            <ErrorBoundary>
+                {(() => {
+                    if (loading) {
+                        return <Loader message="Loading data from Google Sheets..." />;
+                    }
+                    if (error && activeView !== 'settings') {
+                        return (
+                            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md" role="alert">
+                                <p className="font-bold">Error Loading Data</p>
+                                <p>{error}</p>
+                                <button onClick={() => setActiveView('settings')} className="mt-4 bg-red-500 text-white font-bold py-2 px-4 rounded hover:bg-red-600 transition-colors">
+                                    Go to Settings
+                                </button>
+                            </div>
+                        );
+                    }
+                    
+                    switch (activeView) {
+                        case 'dashboard':
+                            return <Dashboard analyses={analyses} clients={clients} technicians={technicians} />;
+                        case 'clients':
+                            return <ClientManagement clients={clients} reloadData={reloadData} />;
+                        case 'technicians':
+                            return <TechnicianManagement technicians={technicians} reloadData={reloadData} />;
+                        case 'newAnalysis':
+                            return <AnalysisRequest clients={clients} technicians={technicians} products={products} analysisCosts={analysisCosts} analyses={analyses} reloadData={reloadData} setActiveView={setActiveView} />;
+                        case 'analyses':
+                            return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} />;
+                        case 'analysisCosts':
+                            return <AnalysisCostsManagement analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} />;
+                        case 'products':
+                            return <ProductManagement products={products} reloadData={reloadData} />;
+                        case 'settings':
+                            return <Settings reloadData={reloadData} />;
+                        default:
+                            return <Dashboard analyses={analyses} clients={clients} technicians={technicians} />;
+                    }
+                })()}
+            </ErrorBoundary>
+        );
     };
 
     if (appMode === 'admin' && isAdminAuthenticated) {
