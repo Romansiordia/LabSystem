@@ -173,7 +173,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientInfo, onLogout }) => 
                         headers={headers} 
                         data={dataRows}
                         onPrint={(index) => handlePrintReport(analyses[index])}
-                        actionsIndex={6}
+                        actionsIndex={1}
                     />
                 )}
             </main>

@@ -7,13 +7,9 @@ import Table from './ui/Table';
 import Modal from './ui/Modal';
 import StatusBadge from './ui/StatusBadge';
 import TestProgress from './ui/TestProgress';
-import { DownloadIcon, SheetIcon, PlusIcon } from './icons/Icons';
+import { DownloadIcon, SheetIcon, PlusIcon, SearchIcon } from './icons/Icons';
 
 const statusOptions: AnalysisStatus[] = ['Received', 'In Progress', 'Completed', 'Cancelled'];
-
-const SearchIcon = () => (
-    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-);
 
 interface AnalysisManagementProps {
     analyses: Analysis[];
@@ -529,7 +525,7 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                 </div>
             </div>
 
-            <Table headers={headers} data={dataRows} onEdit={handleEdit} onDelete={handleDelete} onPrint={handlePrint} actionsIndex={9} />
+            <Table headers={headers} data={dataRows} onEdit={handleEdit} onDelete={handleDelete} onPrint={handlePrint} actionsIndex={1} />
             
             {isModalOpen && editingAnalysis && (
                 <Modal onClose={handleCloseModal} title={`Edit Analysis - ${editingAnalysis.folio}`}>
