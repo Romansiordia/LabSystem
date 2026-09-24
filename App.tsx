@@ -80,15 +80,21 @@ const App: React.FC = () => {
     // UI State
     const [activeView, setActiveView] = useState<View>('dashboard');
     const [loading, setLoading] = useState<boolean>(true);
+    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    const reloadData = async () => {
-        setLoading(true);
+    const reloadData = async (silent: boolean = false) => {
+        if (!silent) {
+            setLoading(true);
+        } else {
+            setIsRefreshing(true);
+        }
         setError(null);
         
         if (!googleScriptUrl) {
             setError('Google Sheets URL not configured. Please set it in Settings.');
             setLoading(false);
+            setIsRefreshing(false);
             if(appMode === 'admin') {
                 setActiveView('settings');
             }
@@ -119,10 +125,13 @@ const App: React.FC = () => {
 
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-            setError(`Failed to load data from Google Sheets. Error: ${errorMessage}`);
+            if (!silent || analyses.length === 0) {
+                setError(`Failed to load data from Google Sheets. Error: ${errorMessage}`);
+            }
             console.error(e);
         } finally {
             setLoading(false);
+            setIsRefreshing(false);
         }
     };
     
@@ -134,13 +143,13 @@ const App: React.FC = () => {
 
 
     useEffect(() => {
-        // Only load data if the admin is authenticated and in admin mode
+        // Only load data if the admin is authenticated and in admin mode initially
         if (appMode === 'admin' && isAdminAuthenticated && googleScriptUrl) {
             reloadData();
         } else {
             setLoading(false);
         }
-    }, [appMode, isAdminAuthenticated, googleScriptUrl, activeView]);
+    }, [appMode, isAdminAuthenticated, googleScriptUrl]);
     
     const handleClientLoginSuccess = (client: LoggedInClient) => {
         setLoggedInClient(client);
@@ -242,8 +251,22 @@ const App: React.FC = () => {
     if (appMode === 'admin' && isAdminAuthenticated) {
       return (
         <div className="flex h-screen bg-gray-100 font-sans">
-          <Sidebar activeView={activeView} setActiveView={setActiveView} onLogout={handleLogout} />
-          <main className="flex-1 p-8 overflow-y-auto">
+          <Sidebar 
+            activeView={activeView} 
+            setActiveView={setActiveView} 
+            onLogout={handleLogout}
+            onRefresh={() => reloadData(true)}
+            isRefreshing={isRefreshing}
+          />
+          <main className="flex-1 p-8 overflow-y-auto relative">
+            {isRefreshing && (
+              <div className="fixed top-4 right-6 z-50 flex items-center gap-2 bg-indigo-600 text-white text-xs font-semibold px-3.5 py-2 rounded-full shadow-lg border border-indigo-400/30">
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>Sincronizando con Google Sheets...</span>
+              </div>
+            )}
             {renderContent()}
           </main>
         </div>
