@@ -97,6 +97,70 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
         }
     };
 
+    const normalize = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    const handleAddPackage = (
+        testItems: Array<string | string[]>,
+        options?: { preferNonNir?: boolean }
+    ) => {
+        if (!analysisCosts || analysisCosts.length === 0) return;
+
+        const testsToAdd: AnalysisCost[] = [];
+
+        testItems.forEach(item => {
+            const aliases = Array.isArray(item) ? item : [item];
+            let match: AnalysisCost | undefined;
+
+            for (const alias of aliases) {
+                const normAlias = normalize(alias);
+                const words = normAlias.split(/\s+/).filter(Boolean);
+
+                const candidates = analysisCosts.filter(t => {
+                    if (!t || !t.testName) return false;
+                    const normName = normalize(t.testName);
+                    if (normName === normAlias) return true;
+                    return words.every(w => normName.includes(w));
+                });
+
+                if (candidates.length > 0) {
+                    if (options?.preferNonNir) {
+                        const nonNir = candidates.find(t => !normalize(t.testName).includes('nir'));
+                        match = nonNir || candidates[0];
+                    } else {
+                        match = candidates[0];
+                    }
+                    break;
+                }
+            }
+
+            if (match && !selectedTests.some(st => st.id === match!.id) && !testsToAdd.some(ta => ta.id === match!.id)) {
+                testsToAdd.push(match);
+            }
+        });
+
+        if (testsToAdd.length > 0) {
+            setSelectedTests(prev => [...prev, ...testsToAdd]);
+        }
+    };
+
+    const handleAddAllNirTests = () => {
+        if (!analysisCosts || analysisCosts.length === 0) return;
+
+        const nirTests = analysisCosts.filter(t => {
+            if (!t || !t.testName) return false;
+            return normalize(t.testName).includes('nir');
+        });
+
+        const newTests = nirTests.filter(nt => !selectedTests.some(st => st.id === nt.id));
+        if (newTests.length > 0) {
+            setSelectedTests(prev => [...prev, ...newTests]);
+        }
+    };
+
+    const handleClearAllTests = () => {
+        setSelectedTests([]);
+    };
+
     const handleRemoveTest = (testId: string) => {
         try {
             setSelectedTests(prev => (prev || []).filter(t => t && t.id !== testId));
@@ -272,7 +336,82 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
                 {/* RIGHT COLUMN: Analysis Selection */}
                 <div className="lg:col-span-7 space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col h-full">
-                        <h2 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-4">Analysis Selection</h2>
+                        <div className="flex items-center justify-between border-b pb-2 mb-4">
+                            <h2 className="text-lg font-semibold text-gray-700">Analysis Selection</h2>
+                            {selectedTests.length > 0 && (
+                                <button 
+                                    type="button" 
+                                    onClick={handleClearAllTests} 
+                                    className="text-xs text-red-600 hover:text-red-800 hover:underline font-medium transition-colors"
+                                >
+                                    Limpiar seleccionados ({selectedTests.length})
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Quick Packages Bar */}
+                        <div className="mb-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 p-3.5 rounded-xl">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span className="text-blue-600">⚡</span> Paquetes Rápidos de Análisis
+                                </span>
+                                <span className="text-[11px] text-blue-700 italic">1 solo clic</span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddPackage([
+                                        ['aflatoxina', 'afla'],
+                                        ['ocratoxina', 'ocra'],
+                                        ['zearalenona', 'zeralenona'],
+                                        ['fumonisina', 'fumo'],
+                                        ['vomitoxina', 'don', 'deoxinivalenol'],
+                                        ['toxina t2', 't2', 't-2']
+                                    ])}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-300 hover:border-amber-600 rounded-lg text-xs font-bold shadow-sm transition-all transform active:scale-95 cursor-pointer"
+                                    title="Agrega Aflatoxina, Ocratoxina, Zeralenona, Fumonisina, Vomitoxina y Toxina T2"
+                                >
+                                    <span className="text-sm font-black">+</span> Paquete Micotoxinas (6)
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddPackage(['proteina', 'humedad', 'grasa', 'fibra', 'ceniza'], { preferNonNir: true })}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-300 hover:border-emerald-600 rounded-lg text-xs font-bold shadow-sm transition-all transform active:scale-95 cursor-pointer"
+                                    title="Agrega Proteína, Humedad, Grasa, Fibra y Ceniza (química húmeda / estándar)"
+                                >
+                                    <span className="text-sm font-black">+</span> Paquete Bromatológico (5)
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddPackage(['proteina nir', 'humedad nir', 'grasa nir', 'fibra nir', 'ceniza nir'])}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-300 hover:border-blue-600 rounded-lg text-xs font-bold shadow-sm transition-all transform active:scale-95 cursor-pointer"
+                                    title="Agrega Proteína NIR, Humedad NIR, Grasa NIR, Fibra NIR y Ceniza NIR simultáneamente"
+                                >
+                                    <span className="text-sm font-black">+</span> Paquete Proximal NIR (5)
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddPackage(['humedad nir', 'proteina nir'])}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-700 text-slate-700 hover:text-white border border-slate-300 hover:border-slate-700 rounded-lg text-xs font-medium shadow-sm transition-all transform active:scale-95 cursor-pointer"
+                                    title="Agrega Humedad y Proteína NIR"
+                                >
+                                    <span className="text-sm font-black">+</span> Humedad + Proteína NIR
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleAddAllNirTests}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-300 hover:border-indigo-600 rounded-lg text-xs font-medium shadow-sm transition-all transform active:scale-95 cursor-pointer"
+                                    title="Agrega todos los análisis que contengan NIR en su nombre"
+                                >
+                                    <span className="text-sm font-black">+</span> Todos los análisis NIR
+                                </button>
+                            </div>
+                        </div>
                         
                         {/* Search and Add */}
                         <div className="relative mb-6">
