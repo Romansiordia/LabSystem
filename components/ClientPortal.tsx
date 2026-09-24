@@ -7,6 +7,7 @@ import Table from './ui/Table';
 import Loader from './ui/Loader';
 import StatusBadge from './ui/StatusBadge';
 import TestProgress from './ui/TestProgress';
+import { ADM_LOGO_BASE64 } from './admLogo';
 
 interface ClientPortalProps {
     clientInfo: LoggedInClient;
@@ -63,71 +64,89 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientInfo, onLogout }) => 
             });
         
         autoTable(doc, {
-            startY: 85,
-            head: [['Parameter', 'Result']],
+            startY: 76,
+            head: [['Parámetro / Parameter', 'Resultado / Result']],
             body: tableBody,
             theme: 'grid',
             headStyles: {
-                fillColor: '#1e40af',
+                fillColor: '#002b66',
                 textColor: '#ffffff',
                 fontStyle: 'bold',
                 halign: 'center'
             },
             alternateRowStyles: {
-                fillColor: '#f5f5f5'
+                fillColor: '#f8fafc'
             },
             didDrawPage: (data) => {
-                // Header
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(22);
-                doc.setTextColor('#1e40af');
-                doc.text('LabSys', margin, 22);
+                // Header with ADM Logo and Laboratory Information
+                try {
+                    doc.addImage(ADM_LOGO_BASE64, 'PNG', margin, 10, 26, 19.5);
+                } catch (e) {
+                    console.error('Error drawing ADM logo:', e);
+                }
 
+                const labInfoX = margin + 29;
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.setTextColor('#002b66');
+                doc.text('ADM', labInfoX, 16);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                doc.setTextColor('#16a34a');
+                doc.text('Laboratorio de Control de Calidad', labInfoX, 21);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.8);
+                doc.setTextColor('#475569');
+                doc.text('BLV. ANACLETO GONZALEZ FLORES No. 359', labInfoX, 26);
+                doc.text('CP: 47600, Tepatitlan de Morelos, Jalisco, México', labInfoX, 30);
+
+                // Right side document title & folio
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(15);
+                doc.setTextColor('#002b66');
+                doc.text('Reporte de Análisis', pageWidth - margin, 17, { align: 'right' });
+                
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(9);
-                doc.setTextColor('#333333');
-                doc.text('Quality Control Laboratory', margin, 28);
-                doc.text('123 Science Rd, Tech Park, 54321', margin, 32);
+                doc.setTextColor('#334155');
+                doc.text(`Folio: ${analysis.folio || 'N/A'}`, pageWidth - margin, 23, { align: 'right' });
+                doc.text(`Recepción: ${analysis.receptionDate || 'N/A'}`, pageWidth - margin, 27.5, { align: 'right' });
+                doc.text(`Entrega: ${analysis.deliveryDate ?? 'Pendiente'}`, pageWidth - margin, 32, { align: 'right' });
 
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(16);
-                doc.text('Analysis Report', pageWidth - margin, 22, { align: 'right' });
-                
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(10);
-                doc.text(`Folio: ${analysis.folio}`, pageWidth - margin, 28, { align: 'right' });
-                doc.text(`Reception: ${analysis.receptionDate}`, pageWidth - margin, 32, { align: 'right' });
-                doc.text(`Delivery: ${analysis.deliveryDate ?? 'N/A'}`, pageWidth - margin, 36, { align: 'right' });
+                doc.setDrawColor('#cbd5e1');
+                doc.setLineWidth(0.4);
+                doc.line(margin, 36, pageWidth - margin, 36);
 
-                doc.setDrawColor('#cccccc');
-                doc.line(margin, 42, pageWidth - margin, 42);
-
-                doc.setFontSize(10);
-                doc.setTextColor('#333333');
+                // Client and Sample Info
+                doc.setFontSize(9.5);
+                doc.setTextColor('#1e293b');
                 
                 doc.setFont('helvetica', 'bold');
-                doc.text('BILLED TO', margin, 50);
+                doc.text('DATOS DEL CLIENTE', margin, 44);
                 doc.setFont('helvetica', 'normal');
-                doc.text(clientInfo.name, margin, 56);
+                doc.text(clientInfo.name, margin, 50);
 
                 doc.setFont('helvetica', 'bold');
-                doc.text('SAMPLE DETAILS', 110, 50);
+                doc.text('DATOS DE LA MUESTRA', 115, 44);
                 doc.setFont('helvetica', 'normal');
-                doc.text(`Sample Name: ${analysis.sampleName}`, 110, 56);
-                doc.text(`Product Type: ${analysis.product}`, 110, 61);
+                doc.text(`Muestra: ${analysis.sampleName || 'N/A'}`, 115, 50);
+                doc.text(`Producto: ${analysis.product || 'N/A'}`, 115, 55);
 
-                doc.line(margin, 70, pageWidth - margin, 70);
+                doc.line(margin, 66, pageWidth - margin, 66);
 
                 const pageCount = (doc as any).internal.getNumberOfPages();
-                doc.setFontSize(9);
-                doc.setTextColor('#888888');
+                doc.setFontSize(8.5);
+                doc.setTextColor('#64748b');
                 const footerY = pageHeight - 20;
                 doc.line(margin, footerY, pageWidth - margin, footerY);
-                doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth - margin, footerY + 12, { align: 'right' });
+                doc.text('ADM - Laboratorio de Control de Calidad', margin, footerY + 12);
+                doc.text(`Página ${data.pageNumber} de ${pageCount}`, pageWidth - margin, footerY + 12, { align: 'right' });
             }
         });
 
-        doc.save(`report-${analysis.folio}.pdf`);
+        doc.save(`reporte-${analysis.folio}.pdf`);
     };
 
     const allTestNames = Array.from(new Set(analyses.flatMap(a => a.requestedTests || []))).sort();

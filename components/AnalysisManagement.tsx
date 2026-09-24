@@ -8,6 +8,7 @@ import Modal from './ui/Modal';
 import StatusBadge from './ui/StatusBadge';
 import TestProgress from './ui/TestProgress';
 import { DownloadIcon, SheetIcon, PlusIcon, SearchIcon } from './icons/Icons';
+import { ADM_LOGO_BASE64 } from './admLogo';
 
 const statusOptions: AnalysisStatus[] = ['Received', 'In Progress', 'Completed', 'Cancelled'];
 
@@ -250,7 +251,30 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
     
     const handleDownloadPdf = () => {
         const doc = new jsPDF({ orientation: 'landscape' });
-        doc.text("Analysis Report", 14, 15);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        try {
+            doc.addImage(ADM_LOGO_BASE64, 'PNG', margin, 8, 20, 15);
+        } catch (e) {
+            console.error('Error adding logo:', e);
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor('#002b66');
+        doc.text('ADM - Laboratorio de Control de Calidad', margin + 24, 14);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor('#475569');
+        doc.text('BLV. ANACLETO GONZALEZ FLORES No. 359. CP: 47600, Tepatitlan de Morelos, Jalisco, México', margin + 24, 19);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor('#002b66');
+        doc.text('Reporte General de Análisis', pageWidth - margin, 14, { align: 'right' });
+
         const pdfDataRows = (filteredAnalyses || []).map(a => {
             const testResults = activeTestNames.map(testName => {
                 const isRequested = (a.requestedTests || []).includes(testName);
@@ -275,12 +299,12 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
         autoTable(doc, {
             head: [headers],
             body: pdfDataRows,
-            startY: 20,
+            startY: 26,
             theme: 'grid',
             styles: { fontSize: 7 },
-            headStyles: { fillColor: [30, 64, 175] },
+            headStyles: { fillColor: [0, 43, 102] },
         });
-        doc.save('analysis-report.pdf');
+        doc.save('reporte-general-analisis.pdf');
     };
 
     const handleExportCSV = () => {
@@ -342,80 +366,98 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
             });
         
         autoTable(doc, {
-            startY: 85,
-            head: [['Parameter', 'Method', 'Result']],
+            startY: 76,
+            head: [['Parámetro / Parameter', 'Método / Method', 'Resultado / Result']],
             body: tableBody,
             theme: 'grid',
             headStyles: {
-                fillColor: '#1e40af',
+                fillColor: '#002b66',
                 textColor: '#ffffff',
                 fontStyle: 'bold',
                 halign: 'center'
             },
             alternateRowStyles: {
-                fillColor: '#f5f5f5'
+                fillColor: '#f8fafc'
             },
             didDrawPage: (data) => {
-                // Header
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(22);
-                doc.setTextColor('#1e40af');
-                doc.text('LabSys', margin, 22);
+                // Header with ADM Logo and Laboratory Information
+                try {
+                    doc.addImage(ADM_LOGO_BASE64, 'PNG', margin, 10, 26, 19.5);
+                } catch (e) {
+                    console.error('Error drawing ADM logo:', e);
+                }
 
+                const labInfoX = margin + 29;
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.setTextColor('#002b66');
+                doc.text('ADM', labInfoX, 16);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                doc.setTextColor('#16a34a');
+                doc.text('Laboratorio de Control de Calidad', labInfoX, 21);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.8);
+                doc.setTextColor('#475569');
+                doc.text('BLV. ANACLETO GONZALEZ FLORES No. 359', labInfoX, 26);
+                doc.text('CP: 47600, Tepatitlan de Morelos, Jalisco, México', labInfoX, 30);
+
+                // Right side document title & folio
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(15);
+                doc.setTextColor('#002b66');
+                doc.text('Reporte de Análisis', pageWidth - margin, 17, { align: 'right' });
+                
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(9);
-                doc.setTextColor('#333333');
-                doc.text('Quality Control Laboratory', margin, 28);
-                doc.text('123 Science Rd, Tech Park, 54321', margin, 32);
+                doc.setTextColor('#334155');
+                doc.text(`Folio: ${analysis.folio || 'N/A'}`, pageWidth - margin, 23, { align: 'right' });
+                doc.text(`Recepción: ${analysis.receptionDate || 'N/A'}`, pageWidth - margin, 27.5, { align: 'right' });
+                doc.text(`Entrega: ${analysis.deliveryDate ?? 'Pendiente'}`, pageWidth - margin, 32, { align: 'right' });
 
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(16);
-                doc.text('Analysis Report', pageWidth - margin, 22, { align: 'right' });
-                
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(10);
-                doc.text(`Folio: ${analysis.folio}`, pageWidth - margin, 28, { align: 'right' });
-                doc.text(`Reception: ${analysis.receptionDate}`, pageWidth - margin, 32, { align: 'right' });
-                doc.text(`Delivery: ${analysis.deliveryDate ?? 'N/A'}`, pageWidth - margin, 36, { align: 'right' });
-
-                doc.setDrawColor('#cccccc');
-                doc.line(margin, 42, pageWidth - margin, 42);
+                doc.setDrawColor('#cbd5e1');
+                doc.setLineWidth(0.4);
+                doc.line(margin, 36, pageWidth - margin, 36);
 
                 // Client and Sample Info
-                doc.setFontSize(10);
-                doc.setTextColor('#333333');
+                doc.setFontSize(9.5);
+                doc.setTextColor('#1e293b');
                 
                 doc.setFont('helvetica', 'bold');
-                doc.text('BILLED TO', margin, 50);
+                doc.text('DATOS DEL CLIENTE', margin, 44);
                 doc.setFont('helvetica', 'normal');
-                doc.text(client?.name ?? 'Unknown Client', margin, 56);
-                doc.text(client?.contactPerson ?? '', margin, 61);
+                doc.text(client?.name ?? 'Cliente no especificado', margin, 50);
+                if (client?.contactPerson) {
+                    doc.text(`Contacto: ${client.contactPerson}`, margin, 55);
+                }
 
                 doc.setFont('helvetica', 'bold');
-                doc.text('SAMPLE DETAILS', 110, 50);
+                doc.text('DATOS DE LA MUESTRA', 115, 44);
                 doc.setFont('helvetica', 'normal');
-                doc.text(`Sample Name: ${analysis.sampleName}`, 110, 56);
-                doc.text(`Product Type: ${analysis.product}`, 110, 61);
+                doc.text(`Muestra: ${analysis.sampleName || 'N/A'}`, 115, 50);
+                doc.text(`Producto: ${analysis.product || 'N/A'}`, 115, 55);
 
-                doc.line(margin, 70, pageWidth - margin, 70);
+                doc.line(margin, 66, pageWidth - margin, 66);
 
                 // Footer
                 const pageCount = (doc as any).internal.getNumberOfPages();
-                doc.setFontSize(9);
-                doc.setTextColor('#888888');
+                doc.setFontSize(8.5);
+                doc.setTextColor('#64748b');
 
                 const footerY = pageHeight - 25;
                 doc.line(margin, footerY, pageWidth - margin, footerY);
 
-                doc.line(margin, footerY + 15, margin + 60, footerY + 15);
-                doc.text('Analyzed by:', margin, footerY + 20);
-                doc.text(technician?.name ?? 'Unknown', margin, footerY + 24);
+                doc.line(margin, footerY + 13, margin + 60, footerY + 13);
+                doc.text('Analizado por:', margin, footerY + 18);
+                doc.text(technician?.name ?? 'Técnico de Laboratorio', margin, footerY + 22);
 
-                doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth - margin, footerY + 22, { align: 'right' });
+                doc.text(`Página ${data.pageNumber} de ${pageCount}`, pageWidth - margin, footerY + 20, { align: 'right' });
             }
         });
 
-        doc.save(`report-${analysis.folio}.pdf`);
+        doc.save(`reporte-${analysis.folio}.pdf`);
     };
 
     const inputStyle = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
