@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Analysis, Client, Technician, View, AnalysisStatus, AnalysisCost, AnalysisType, AnalysisResultItem } from '../types';
+import { Analysis, Client, Technician, View, AnalysisStatus, AnalysisCost, AnalysisType, AnalysisResultItem, Product } from '../types';
 import Table from './ui/Table';
 import Modal from './ui/Modal';
 import StatusBadge from './ui/StatusBadge';
@@ -16,6 +16,7 @@ interface AnalysisManagementProps {
     analyses: Analysis[];
     clients: Client[];
     technicians: Technician[];
+    products?: Product[];
     analysisCosts: AnalysisCost[];
     analysisTypes: AnalysisType[];
     reloadData: () => Promise<void>;
@@ -23,10 +24,16 @@ interface AnalysisManagementProps {
     onUpdateAnalysis?: (updated: Analysis) => void;
 }
 
-const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clients, technicians, analysisCosts, analysisTypes, reloadData, setActiveView, onUpdateAnalysis }) => {
+const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clients, technicians, products, analysisCosts, analysisTypes, reloadData, setActiveView, onUpdateAnalysis }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAnalysis, setEditingAnalysis] = useState<Analysis | null>(null);
     const [modalFormData, setModalFormData] = useState<Partial<Analysis>>({});
+    
+    // State for Sample Details Editing Modal (Option B)
+    const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
+    const [editingSample, setEditingSample] = useState<Analysis | null>(null);
+    const [sampleFormData, setSampleFormData] = useState<Partial<Analysis>>({});
+
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [syncNotification, setSyncNotification] = useState<{
@@ -125,6 +132,56 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
         setEditingAnalysis(null);
         setSubmitStatus('idle');
         setSubmitError(null);
+    };
+
+    const handleEditSample = (index: number) => {
+        const targetAnalysis = filteredAnalyses[index];
+        if (!targetAnalysis) return;
+        setEditingSample(targetAnalysis);
+        setSampleFormData({
+            sampleName: targetAnalysis.sampleName || '',
+            product: targetAnalysis.product || '',
+            subtype: targetAnalysis.subtype || '',
+            clientId: targetAnalysis.clientId || '',
+            technicianId: targetAnalysis.technicianId || '',
+            priority: targetAnalysis.priority || 'Normal',
+            receptionDate: targetAnalysis.receptionDate || '',
+            deliveryDate: targetAnalysis.deliveryDate || '',
+            status: targetAnalysis.status || 'Received',
+            lot: targetAnalysis.lot || '',
+        });
+        setIsSampleModalOpen(true);
+    };
+
+    const handleCloseSampleModal = () => {
+        setIsSampleModalOpen(false);
+        setEditingSample(null);
+        setSampleFormData({});
+    };
+
+    const handleSampleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setSampleFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSaveSampleDetails = () => {
+        if (!editingSample) return;
+
+        const updatedAnalysis: Analysis = {
+            ...editingSample,
+            ...sampleFormData,
+        };
+
+        // 1. Guardado Optimista en UI inmediata (0 ms)
+        if (onUpdateAnalysis) {
+            onUpdateAnalysis(updatedAnalysis);
+        }
+
+        // 2. Cerrar ventana modal al instante
+        handleCloseSampleModal();
+
+        // 3. Sincronizar en segundo plano con Google Sheets
+        syncToGoogleSheets(updatedAnalysis);
     };
     
     const handleModalFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -601,8 +658,191 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                 </div>
             </div>
 
-            <Table headers={headers} data={dataRows} onEdit={handleEdit} onDelete={handleDelete} onPrint={handlePrint} actionsIndex={1} />
+            <Table headers={headers} data={dataRows} onEdit={handleEdit} onEditSample={handleEditSample} onDelete={handleDelete} onPrint={handlePrint} actionsIndex={1} />
             
+            {/* Modal para Editar Datos de la Muestra (Opción B) */}
+            {isSampleModalOpen && editingSample && (
+                <Modal onClose={handleCloseSampleModal} title={`Editar Datos de Muestra - ${editingSample.folio || ''}`}>
+                    <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-start gap-2">
+                            <span className="text-base leading-none">ℹ️</span>
+                            <span>Aquí puedes modificar los datos generales de la muestra (cliente, técnico, producto, lote y fechas). Para capturar o modificar resultados de laboratorio, haz clic en el botón de resultados (lápiz azul).</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Folio</label>
+                                <input 
+                                    type="text" 
+                                    value={editingSample.folio || ''} 
+                                    disabled 
+                                    className="mt-1 block w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-600 font-bold sm:text-sm cursor-not-allowed" 
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="sampleName" className="block text-sm font-medium text-gray-700">Nombre de la Muestra *</label>
+                                <input 
+                                    type="text" 
+                                    name="sampleName" 
+                                    id="sampleName" 
+                                    value={sampleFormData.sampleName || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle} 
+                                    required 
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="product" className="block text-sm font-medium text-gray-700">Producto *</label>
+                                {products && products.length > 0 ? (
+                                    <select 
+                                        name="product" 
+                                        id="product" 
+                                        value={sampleFormData.product || ''} 
+                                        onChange={handleSampleFormChange} 
+                                        className={inputStyle}
+                                    >
+                                        <option value="">Selecciona un producto...</option>
+                                        {products.map(p => (
+                                            <option key={p.id} value={p.name}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input 
+                                        type="text" 
+                                        name="product" 
+                                        id="product" 
+                                        value={sampleFormData.product || ''} 
+                                        onChange={handleSampleFormChange} 
+                                        className={inputStyle} 
+                                    />
+                                )}
+                            </div>
+
+                            <div>
+                                <label htmlFor="lot" className="block text-sm font-medium text-gray-700">Lote / Subtipo</label>
+                                <input 
+                                    type="text" 
+                                    name="lot" 
+                                    id="lot" 
+                                    value={sampleFormData.lot || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle} 
+                                    placeholder="Lote o referencia" 
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="clientId" className="block text-sm font-medium text-gray-700">Cliente *</label>
+                                <select 
+                                    name="clientId" 
+                                    id="clientId" 
+                                    value={sampleFormData.clientId || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle}
+                                >
+                                    <option value="">Selecciona un cliente...</option>
+                                    {(clients || []).map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label htmlFor="technicianId" className="block text-sm font-medium text-gray-700">Técnico Analista Responsable</label>
+                                <select 
+                                    name="technicianId" 
+                                    id="technicianId" 
+                                    value={sampleFormData.technicianId || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle}
+                                >
+                                    <option value="">Selecciona un técnico...</option>
+                                    {(technicians || []).map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label htmlFor="receptionDate" className="block text-sm font-medium text-gray-700">Fecha de Recepción</label>
+                                <input 
+                                    type="date" 
+                                    name="receptionDate" 
+                                    id="receptionDate" 
+                                    value={sampleFormData.receptionDate?.split('T')[0] || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle} 
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="deliveryDate" className="block text-sm font-medium text-gray-700">Fecha Estimada de Entrega</label>
+                                <input 
+                                    type="date" 
+                                    name="deliveryDate" 
+                                    id="deliveryDate" 
+                                    value={sampleFormData.deliveryDate?.split('T')[0] || ''} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle} 
+                                />
+                            </div>
+
+                            <div>
+                                <label htmlFor="priority" className="block text-sm font-medium text-gray-700">Prioridad</label>
+                                <select 
+                                    name="priority" 
+                                    id="priority" 
+                                    value={sampleFormData.priority || 'Normal'} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle}
+                                >
+                                    <option value="Normal">Normal</option>
+                                    <option value="Urgent">Urgente</option>
+                                    <option value="Low">Baja</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label htmlFor="status" className="block text-sm font-medium text-gray-700">Estado de la Muestra</label>
+                                <select 
+                                    name="status" 
+                                    id="status" 
+                                    value={sampleFormData.status || 'Received'} 
+                                    onChange={handleSampleFormChange} 
+                                    className={inputStyle}
+                                >
+                                    {statusOptions.map(s => (
+                                        <option key={s} value={s}>{translateStatus(s)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-3">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Pruebas Asignadas</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {(editingSample.requestedTests || []).map(test => (
+                                    <span key={test} className="px-2.5 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded text-xs font-medium">
+                                        {test}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end p-4 bg-gray-50 border-t">
+                        <button onClick={handleCloseSampleModal} className="bg-gray-200 text-gray-800 hover:bg-gray-300 font-bold py-2 px-4 rounded-lg transition-colors mr-2">
+                            Cancelar
+                        </button>
+                        <button onClick={handleSaveSampleDetails} className="font-bold py-2 px-4 rounded-lg transition-colors text-white bg-amber-600 hover:bg-amber-700">
+                            Guardar Datos de Muestra
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
             {isModalOpen && editingAnalysis && (
                 <Modal onClose={handleCloseModal} title={`Edit Analysis - ${editingAnalysis.folio}`}>
                     <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">

@@ -1,18 +1,19 @@
 
 import React from 'react';
-import { PencilIcon, TrashIcon, PrintIcon } from '../icons/Icons';
+import { PencilIcon, TrashIcon, PrintIcon, EditSampleIcon } from '../icons/Icons';
 
 interface TableProps {
   headers: string[];
   data: React.ReactNode[][];
   onEdit?: (index: number) => void;
+  onEditSample?: (index: number) => void;
   onDelete?: (index: number) => void;
   onPrint?: (index: number) => void;
   actionsIndex?: number;
 }
 
-const Table: React.FC<TableProps> = ({ headers, data, onEdit, onDelete, onPrint, actionsIndex }) => {
-  const showActions = onEdit || onDelete || onPrint;
+const Table: React.FC<TableProps> = ({ headers, data, onEdit, onEditSample, onDelete, onPrint, actionsIndex }) => {
+  const showActions = onEdit || onEditSample || onDelete || onPrint;
   
   const renderActionsHeader = () => (
     <th key="actions-header" scope="col" className="relative px-6 py-3">
@@ -22,19 +23,24 @@ const Table: React.FC<TableProps> = ({ headers, data, onEdit, onDelete, onPrint,
 
   const renderActionsCell = (rowIndex: number) => (
     <td key={`actions-cell-${rowIndex}`} className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-      <div className="flex items-center justify-end space-x-4">
+      <div className="flex items-center justify-end space-x-3">
         {onPrint && (
-             <button onClick={() => onPrint(rowIndex)} className="text-gray-600 hover:text-gray-900" aria-label="Print">
+             <button onClick={() => onPrint(rowIndex)} className="text-gray-600 hover:text-gray-900 transition-colors" title="Imprimir / Descargar Reporte" aria-label="Print">
                 <PrintIcon />
             </button>
         )}
+        {onEditSample && (
+          <button onClick={() => onEditSample(rowIndex)} className="text-amber-600 hover:text-amber-800 transition-colors" title="Editar Datos de la Muestra" aria-label="Edit Sample">
+            <EditSampleIcon />
+          </button>
+        )}
         {onEdit && (
-          <button onClick={() => onEdit(rowIndex)} className="text-blue-600 hover:text-blue-900" aria-label="Edit">
+          <button onClick={() => onEdit(rowIndex)} className="text-blue-600 hover:text-blue-900 transition-colors" title="Capturar Resultados de Laboratorio" aria-label="Edit Results">
             <PencilIcon />
           </button>
         )}
         {onDelete && (
-          <button onClick={() => onDelete(rowIndex)} className="text-red-600 hover:text-red-900" aria-label="Delete">
+          <button onClick={() => onDelete(rowIndex)} className="text-red-600 hover:text-red-900 transition-colors" title="Eliminar Análisis" aria-label="Delete">
             <TrashIcon />
           </button>
         )}

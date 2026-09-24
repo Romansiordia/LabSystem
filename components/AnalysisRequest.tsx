@@ -12,6 +12,7 @@ interface AnalysisRequestProps {
     analyses: Analysis[];
     reloadData: () => Promise<void>;
     setActiveView: (view: View) => void;
+    onAddAnalysis?: (newAnalysis: Analysis) => void;
 }
 
 const generateFolio = (existingAnalyses: Analysis[]): string => {
@@ -54,7 +55,7 @@ const initialFormData = {
     priority: 'Normal' as AnalysisPriority,
 };
 
-const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActiveView, analysisCosts, clients, technicians, products, analyses }) => {
+const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActiveView, analysisCosts, clients, technicians, products, analyses, onAddAnalysis }) => {
     console.log('AnalysisRequest rendering with:', { 
         hasAnalysisCosts: !!analysisCosts, 
         hasClients: !!clients, 
@@ -140,37 +141,38 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
             return;
         }
 
-        try {
-            const requestPayload = { 
-                action: 'create', 
-                targetSheet: 'AnalysisResults', 
-                payload: newAnalysis 
-            };
-            const postData = new URLSearchParams();
-            postData.append('payload', JSON.stringify(requestPayload));
-            
-            const response = await fetch(googleScriptUrl, {
-                method: 'POST',
-                body: postData,
-            });
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                setSubmitStatus('success');
-                setTimeout(() => {
-                    reloadData().then(() => {
-                        setActiveView('analyses');
-                    });
-                }, 1500);
-            } else {
-                throw new Error(result.message || 'Unknown error from Google Script.');
-            }
-        } catch (error) {
-            console.error('Failed to submit to Google Sheets:', error);
-            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-            setSubmitError(`Submission Failed: ${errorMessage}`);
-            setSubmitStatus('error');
+        // 1. Guardado Optimista: Agregar inmediatamente a la lista local
+        if (onAddAnalysis) {
+            onAddAnalysis(newAnalysis);
         }
+
+        // 2. Redirigir de inmediato a la lista de análisis (0 segundos de espera)
+        setActiveView('analyses');
+
+        // 3. Sincronización en segundo plano con Google Sheets
+        (async () => {
+            try {
+                const requestPayload = { 
+                    action: 'create', 
+                    targetSheet: 'AnalysisResults', 
+                    payload: newAnalysis 
+                };
+                const postData = new URLSearchParams();
+                postData.append('payload', JSON.stringify(requestPayload));
+                
+                const response = await fetch(googleScriptUrl, {
+                    method: 'POST',
+                    body: postData,
+                });
+                const result = await response.json();
+
+                if (result.status !== 'success') {
+                    console.error('Error from Google Script:', result.message);
+                }
+            } catch (error) {
+                console.error('Failed to submit to Google Sheets in background:', error);
+            }
+        })();
     };
     
     const inputStyle = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
