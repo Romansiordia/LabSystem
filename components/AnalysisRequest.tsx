@@ -50,6 +50,7 @@ const initialFormData = {
     sampleName: '',
     product: '',
     subtype: '',
+    lot: '',
     clientId: '',
     technicianId: '',
     priority: 'Normal' as AnalysisPriority,
@@ -129,6 +130,8 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
             folio: finalFolio,
             id: `an${Date.now()}`,
             cost: totalCost,
+            lot: formData.lot || '',
+            subtype: formData.lot || formData.subtype || '',
             requestedTests: (selectedTests || []).filter(t => t && t.testName).map(t => t.testName),
             status: 'Received',
             results: (selectedTests || []).filter(t => t && t.testName).map(t => ({ testName: t.testName, value: null })),
@@ -229,6 +232,18 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
                                     <option value="" disabled>Select a product</option>
                                     {products && products.map(p => p && <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
+                            </div>
+                            <div>
+                                <label htmlFor="lot" className="block text-sm font-medium text-gray-700">Lote / Subtipo</label>
+                                <input 
+                                    type="text" 
+                                    name="lot" 
+                                    id="lot" 
+                                    value={formData.lot} 
+                                    onChange={handleChange} 
+                                    className={inputStyle} 
+                                    placeholder="Lote o referencia" 
+                                />
                             </div>
                             <div>
                                 <label htmlFor="clientId" className="block text-sm font-medium text-gray-700">Client</label>
