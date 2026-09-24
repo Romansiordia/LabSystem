@@ -61,6 +61,9 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
 
     const [importMode, setImportMode] = useState<ImportMode>('matrix');
     const [folioColumn, setFolioColumn] = useState<string>('');
+    const [headerRowIndex, setHeaderRowIndex] = useState<number>(0);
+    const [rawSheetData, setRawSheetData] = useState<any[][]>([]);
+    const [availableHeaderRows, setAvailableHeaderRows] = useState<{ index: number; label: string; preview: string }[]>([]);
     
     // Matrix Mode mappings
     const [matrixMappings, setMatrixMappings] = useState<ColumnMapping[]>([]);
@@ -84,9 +87,9 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
     const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
 
-    // Helper: Normalize strings for fuzzy comparison
-    const normalize = (str: string) => {
-        return (str || '')
+    // Helper: Normalize strings for fuzzy comparison safely handling numbers, null, and undefined
+    const normalize = (str: any) => {
+        return String(str ?? '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase()
@@ -98,14 +101,15 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
     const availableTestNames = useMemo(() => {
         const namesSet = new Set<string>();
         (analysisCosts || []).forEach(ac => {
-            if (ac && ac.testName) namesSet.add(ac.testName.trim());
+            if (ac && ac.testName) namesSet.add(String(ac.testName).trim());
         });
         (analysisTypes || []).forEach(at => {
-            if (at && at.testName) namesSet.add(at.testName.trim());
+            if (at && at.testName) namesSet.add(String(at.testName).trim());
         });
         (analyses || []).forEach(a => {
+            if (!a) return;
             (a.requestedTests || []).forEach(t => {
-                if (t) namesSet.add(t.trim());
+                if (t) namesSet.add(String(t).trim());
             });
         });
         return Array.from(namesSet).sort();
@@ -115,14 +119,14 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
     const cleanValue = (val: any): string | number | null => {
         if (val === null || val === undefined) return null;
         let str = String(val).trim();
-        if (str === '' || str === '-' || str === 'NA' || str === 'N/A') return null;
+        if (str === '' || str === '-' || str === 'NA' || str === 'N/A' || str.toLowerCase() === 'null' || str.toLowerCase() === 'undefined') return null;
 
         // If it's a percentage (e.g., "12.5%"), remove %
         if (str.endsWith('%')) {
             str = str.slice(0, -1).trim();
         }
 
-        // Handle comma as decimal separator if standard number pattern (e.g., "12,5")
+        // Handle comma as decimal separator if standard number pattern (e.g., "12,5" or "12,5432")
         if (/^-?\d+,\d+$/.test(str)) {
             str = str.replace(',', '.');
         }
@@ -140,6 +144,16 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
     const findBestTestMatch = (columnHeader: string): string => {
         const normHeader = normalize(columnHeader);
         if (!normHeader) return '';
+
+        // Ignore known metadata or non-analyte columns
+        const ignoreKeywords = [
+            'folio', 'muestra', 'sample', 'comentario', 'comentarios', 'observacion',
+            'observaciones', 'nombre', 'name', 'fecha', 'date', 'operador', 'tecnico',
+            'metodo', 'serie', 'instrumento', 'masa', 'peso', 'weight', 'tara'
+        ];
+        if (ignoreKeywords.some(k => normHeader === k || normHeader.includes(k))) {
+            return '';
+        }
 
         // Exact normalized match
         for (const test of availableTestNames) {
@@ -180,13 +194,18 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
         return '';
     };
 
-    // Auto-detect folio column
+    // Auto-detect folio column with priority ordering
     const detectFolioColumn = (headers: string[]): string => {
-        const keywords = ['folio', 'muestra', 'sample', 'id', 'lote', 'codigo', 'code', 'no'];
-        for (const header of headers) {
-            const norm = normalize(header);
-            if (keywords.some(k => norm.includes(k))) {
-                return header;
+        const priority1 = ['folio', 'sample id', 'muestra id', 'codigo', 'code'];
+        const priority2 = ['muestra', 'sample', 'lote', 'lot', 'id'];
+        const priority3 = ['comentarios', 'comentario', 'observaciones', 'nombre', 'name'];
+
+        for (const p of [priority1, priority2, priority3]) {
+            for (const header of headers) {
+                const norm = normalize(header);
+                if (p.some(k => norm.includes(k) || k.includes(norm))) {
+                    return header;
+                }
             }
         }
         return headers[0] || '';
@@ -219,36 +238,18 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
         reader.readAsBinaryString(file);
     };
 
-    const parseSheet = (wb: XLSX.WorkBook, sheetName: string) => {
-        const ws = wb.Sheets[sheetName];
-        if (!ws) return;
-
-        // Convert to array of arrays to safely find header row
-        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        if (!data || data.length === 0) {
-            setFileHeaders([]);
-            setFileRows([]);
-            return;
-        }
-
-        // Find first non-empty row as header
-        let headerRowIdx = 0;
-        while (headerRowIdx < data.length && (!data[headerRowIdx] || data[headerRowIdx].every(c => c === ''))) {
-            headerRowIdx++;
-        }
-
-        if (headerRowIdx >= data.length) {
+    const applyHeadersAndRows = (data: any[][], headerRowIdx: number) => {
+        if (!data || headerRowIdx >= data.length) {
             setFileHeaders([]);
             setFileRows([]);
             return;
         }
 
         const rawHeaders = (data[headerRowIdx] || []).map((h: any, i: number) => {
-            const str = String(h || '').trim();
+            const str = String(h ?? '').trim();
             return str !== '' ? str : `Columna_${i + 1}`;
         });
 
-        // Filter out completely empty columns from the end
         const headers = rawHeaders;
         setFileHeaders(headers);
 
@@ -256,7 +257,7 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
         const rows: any[] = [];
         for (let i = headerRowIdx + 1; i < data.length; i++) {
             const rowData = data[i];
-            if (!rowData || rowData.every(c => c === '' || c === null || c === undefined)) {
+            if (!rowData || rowData.every((c: any) => c === '' || c === null || c === undefined)) {
                 continue; // Skip empty rows
             }
             const rowObj: Record<string, any> = {};
@@ -303,6 +304,91 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
         }
     };
 
+    const parseSheet = (wb: XLSX.WorkBook, sheetName: string, forcedHeaderIdx?: number) => {
+        const ws = wb.Sheets[sheetName];
+        if (!ws) return;
+
+        // Convert to array of arrays to safely find header row
+        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (!data || data.length === 0) {
+            setRawSheetData([]);
+            setFileHeaders([]);
+            setFileRows([]);
+            setAvailableHeaderRows([]);
+            return;
+        }
+
+        setRawSheetData(data);
+
+        // Intelligent Header Row Detection (handles Dumas FP828, NIR, and standard sheets)
+        const headerKeywords = [
+            'nombre', 'sample', 'muestra', 'folio', 'id', 'proteina', 'protein',
+            'humedad', 'grasa', 'fat', 'fibra', 'fiber', 'ceniza', 'ash', 'masa',
+            'fecha', 'date', 'comentarios', 'comentario', 'resultado', 'lote', 'lot',
+            'codigo', 'code', 'analito', 'peso', 'weight', 'densidad'
+        ];
+
+        const candidates: { index: number; label: string; preview: string; score: number }[] = [];
+        let bestHeaderIdx = 0;
+        let highestScore = -1;
+
+        const maxScanRows = Math.min(data.length, 12);
+        for (let r = 0; r < maxScanRows; r++) {
+            const row = data[r] || [];
+            const nonBlank = row.filter((c: any) => c !== '' && c !== null && c !== undefined);
+            if (nonBlank.length === 0) continue;
+
+            let score = 0;
+            const previewItems: string[] = [];
+
+            nonBlank.forEach((cell: any) => {
+                const cellStr = String(cell).trim();
+                const cellNorm = normalize(cellStr);
+                if (!cellNorm) return;
+
+                if (previewItems.length < 4) {
+                    previewItems.push(cellStr);
+                }
+
+                if (headerKeywords.some(k => cellNorm.includes(k))) {
+                    score += 15;
+                } else if (!/^\d+(\.\d+)?$/.test(cellStr) && cellStr.length > 1 && cellStr.length < 40) {
+                    score += 3;
+                } else {
+                    score -= 1;
+                }
+            });
+
+            if (nonBlank.length >= 3) score += 5;
+
+            candidates.push({
+                index: r,
+                label: `Fila ${r + 1}`,
+                preview: previewItems.slice(0, 3).join(' | '),
+                score
+            });
+
+            if (score > highestScore) {
+                highestScore = score;
+                bestHeaderIdx = r;
+            }
+        }
+
+        setAvailableHeaderRows(candidates);
+
+        const chosenHeaderIdx = forcedHeaderIdx !== undefined ? forcedHeaderIdx : bestHeaderIdx;
+        setHeaderRowIndex(chosenHeaderIdx);
+
+        applyHeadersAndRows(data, chosenHeaderIdx);
+    };
+
+    const handleHeaderRowChange = (newHeaderIdx: number) => {
+        setHeaderRowIndex(newHeaderIdx);
+        if (rawSheetData && rawSheetData.length > 0) {
+            applyHeadersAndRows(rawSheetData, newHeaderIdx);
+        }
+    };
+
     const handleSheetChange = (newSheet: string) => {
         setSelectedSheet(newSheet);
         if (rawWorkbook) {
@@ -311,31 +397,44 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
     };
 
     // Match a raw folio string to an Analysis in our database
-    const findMatchedAnalysis = (rawFolio: string): Analysis | null => {
-        if (!rawFolio) return null;
-        const normRaw = normalize(rawFolio);
+    const findMatchedAnalysis = (rawFolio: any): Analysis | null => {
+        if (rawFolio === null || rawFolio === undefined || rawFolio === '') return null;
+        const folioStr = String(rawFolio).trim();
+        if (!folioStr) return null;
+        const normRaw = normalize(folioStr);
         if (!normRaw) return null;
 
         // 1. Exact match by folio
-        let found = (analyses || []).find(a => normalize(a.folio) === normRaw);
+        let found = (analyses || []).find(a => a && normalize(a.folio) === normRaw);
         if (found) return found;
 
         // 2. Exact match by sampleName or ID
-        found = (analyses || []).find(a => normalize(a.sampleName) === normRaw || normalize(a.id) === normRaw);
+        found = (analyses || []).find(a => a && (normalize(a.sampleName) === normRaw || normalize(a.id) === normRaw));
         if (found) return found;
 
         // 3. Match by lot
-        if (analyses.some(a => a.lot)) {
-            found = (analyses || []).find(a => a.lot && normalize(a.lot) === normRaw);
+        if ((analyses || []).some(a => a && a.lot)) {
+            found = (analyses || []).find(a => a && a.lot && normalize(a.lot) === normRaw);
             if (found) return found;
         }
 
-        // 4. Loose match: strip leading zeros or prefix (e.g. M-2026-001 vs 2026-001 or 001)
-        const digitsOnlyRaw = rawFolio.replace(/\D/g, '');
+        // 4. Substring match (e.g. sampleName or folio contains the code or vice versa)
+        found = (analyses || []).find(a => {
+            if (!a) return false;
+            const normF = normalize(a.folio);
+            const normS = normalize(a.sampleName);
+            return (normF && (normF.includes(normRaw) || normRaw.includes(normF))) ||
+                   (normS && (normS.includes(normRaw) || normRaw.includes(normS)));
+        });
+        if (found) return found;
+
+        // 5. Loose match: strip leading non-digits (e.g. M-2026-001 vs 2026001 or 001)
+        const digitsOnlyRaw = folioStr.replace(/\D/g, '');
         if (digitsOnlyRaw.length >= 3) {
             found = (analyses || []).find(a => {
-                const aDigits = (a.folio || '').replace(/\D/g, '');
-                return aDigits && (aDigits === digitsOnlyRaw || aDigits.endsWith(digitsOnlyRaw));
+                if (!a) return false;
+                const aDigits = String(a.folio || '').replace(/\D/g, '');
+                return aDigits && (aDigits === digitsOnlyRaw || aDigits.endsWith(digitsOnlyRaw) || digitsOnlyRaw.endsWith(aDigits));
             });
             if (found) return found;
         }
@@ -659,6 +758,9 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
         setFileName(null);
         setFileRows([]);
         setFileHeaders([]);
+        setRawSheetData([]);
+        setAvailableHeaderRows([]);
+        setHeaderRowIndex(0);
         setMatrixMappings([]);
         setSaveSuccess(null);
         setSaveError(null);
@@ -789,6 +891,24 @@ export const ImportResultsModal: React.FC<ImportResultsModalProps> = ({
                                             >
                                                 {sheetNames.map(s => (
                                                     <option key={s} value={s}>{s}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {availableHeaderRows.length > 1 && (
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-xs font-semibold text-gray-600">Fila encabezados:</span>
+                                            <select
+                                                value={headerRowIndex}
+                                                onChange={(e) => handleHeaderRowChange(Number(e.target.value))}
+                                                className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none max-w-[200px]"
+                                                title="Fila donde inician los nombres de columnas"
+                                            >
+                                                {availableHeaderRows.map(r => (
+                                                    <option key={r.index} value={r.index}>
+                                                        {r.label} {r.preview ? `(${r.preview.slice(0, 24)}...)` : ''}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>

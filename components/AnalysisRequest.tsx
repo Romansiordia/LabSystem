@@ -97,7 +97,7 @@ const AnalysisRequest: React.FC<AnalysisRequestProps> = ({ reloadData, setActive
         }
     };
 
-    const normalize = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const normalize = (str: any) => String(str ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
     const handleAddPackage = (
         testItems: Array<string | string[]>,
