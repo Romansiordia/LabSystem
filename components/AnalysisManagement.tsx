@@ -20,14 +20,21 @@ interface AnalysisManagementProps {
     analysisTypes: AnalysisType[];
     reloadData: () => Promise<void>;
     setActiveView: (view: View) => void;
+    onUpdateAnalysis?: (updated: Analysis) => void;
 }
 
-const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clients, technicians, analysisCosts, analysisTypes, reloadData, setActiveView }) => {
+const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clients, technicians, analysisCosts, analysisTypes, reloadData, setActiveView, onUpdateAnalysis }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAnalysis, setEditingAnalysis] = useState<Analysis | null>(null);
     const [modalFormData, setModalFormData] = useState<Partial<Analysis>>({});
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [syncNotification, setSyncNotification] = useState<{
+        folio: string;
+        status: 'syncing' | 'synced' | 'error';
+        message?: string;
+        payload?: Analysis;
+    } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [clientSearchTerm, setClientSearchTerm] = useState('');
     const [dateSearchTerm, setDateSearchTerm] = useState('');
@@ -141,40 +148,25 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
         });
     }
 
-    const handleSaveAndSubmit = async () => {
-        if (!editingAnalysis) return;
-
-        setSubmitStatus('submitting');
-        setSubmitError(null);
-
+    const syncToGoogleSheets = async (payloadForSheet: Analysis) => {
         const googleScriptUrl = localStorage.getItem('googleScriptUrl');
+        const folioDisplay = payloadForSheet.folio || 'N/A';
+
         if (!googleScriptUrl) {
-            setSubmitError('Google Sheets URL not configured. Please set it in Settings.');
-            setSubmitStatus('error');
+            setSyncNotification({
+                folio: folioDisplay,
+                status: 'error',
+                message: 'No se ha configurado la URL de Google Sheets en Configuración.',
+                payload: payloadForSheet
+            });
             return;
         }
-        
-        const processedResults = (modalFormData.results || []).map(result => {
-            const analysisType = analysisTypes.find(at => at.testName === result.testName);
-            if (analysisType?.resultType === 'numeric') {
-                if (result.value === null || result.value === '') {
-                    return { ...result, value: null };
-                }
-                const parsedValue = parseFloat(String(result.value));
-                return {
-                    ...result,
-                    value: isNaN(parsedValue) ? null : parsedValue,
-                };
-            }
-            return result;
+
+        setSyncNotification({
+            folio: folioDisplay,
+            status: 'syncing',
+            payload: payloadForSheet
         });
-
-
-        const payloadForSheet: Analysis = {
-            ...editingAnalysis,
-            ...modalFormData,
-            results: processedResults,
-        };
 
         try {
             const requestPayload = {
@@ -192,21 +184,63 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
             const result = await response.json();
 
             if (result.status === 'success') {
-                setSubmitStatus('success');
-                setTimeout(async () => {
-                    await reloadData();
-                    handleCloseModal();
-                }, 1500);
+                setSyncNotification({
+                    folio: folioDisplay,
+                    status: 'synced'
+                });
+                setTimeout(() => {
+                    setSyncNotification(prev => prev?.folio === folioDisplay && prev?.status === 'synced' ? null : prev);
+                }, 3500);
             } else {
-                 throw new Error(result.message || 'Unknown error from Google Script.');
+                throw new Error(result.message || 'Error en Google Script.');
             }
         } catch (error) {
-             console.error('Failed to submit to Google Sheets:', error);
-             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-             setSubmitError(`Failed to submit data: ${errorMessage}. Check URL and sheet permissions.`);
-             setSubmitStatus('error');
+            console.error('Error al sincronizar con Google Sheets:', error);
+            const errorMessage = error instanceof Error ? error.message : "Error de conexión con Google Sheets";
+            setSyncNotification({
+                folio: folioDisplay,
+                status: 'error',
+                message: errorMessage,
+                payload: payloadForSheet
+            });
         }
-    }
+    };
+
+    const handleSaveAndSubmit = () => {
+        if (!editingAnalysis) return;
+
+        const processedResults = (modalFormData.results || []).map(result => {
+            const analysisType = analysisTypes.find(at => at.testName === result.testName);
+            if (analysisType?.resultType === 'numeric') {
+                if (result.value === null || result.value === '') {
+                    return { ...result, value: null };
+                }
+                const parsedValue = parseFloat(String(result.value));
+                return {
+                    ...result,
+                    value: isNaN(parsedValue) ? null : parsedValue,
+                };
+            }
+            return result;
+        });
+
+        const payloadForSheet: Analysis = {
+            ...editingAnalysis,
+            ...modalFormData,
+            results: processedResults,
+        };
+
+        // 1. Guardado Optimista: Actualizar interfaz inmediatamente (0 ms)
+        if (onUpdateAnalysis) {
+            onUpdateAnalysis(payloadForSheet);
+        }
+
+        // 2. Cerrar el modal al instante (el usuario no espera nada)
+        handleCloseModal();
+
+        // 3. Sincronización en segundo plano con Google Sheets
+        syncToGoogleSheets(payloadForSheet);
+    };
     
     const getButtonText = () => {
         switch(submitStatus) {
@@ -621,16 +655,60 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                         <button onClick={handleCloseModal} className="bg-gray-200 text-gray-800 hover:bg-gray-300 font-bold py-2 px-4 rounded-lg transition-colors mr-2">
                             Cancel
                         </button>
-                        <button onClick={handleSaveAndSubmit} disabled={submitStatus === 'submitting' || submitStatus === 'success'} className={`font-bold py-2 px-4 rounded-lg transition-colors text-white ${
-                             submitStatus === 'submitting' ? 'bg-gray-400 cursor-not-allowed' : 
-                             submitStatus === 'success' ? 'bg-green-600' : 
-                             submitStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
-                             'bg-primary hover:bg-secondary'
-                        }`}>
-                            {getButtonText()}
+                        <button onClick={handleSaveAndSubmit} className="font-bold py-2 px-4 rounded-lg transition-colors text-white bg-primary hover:bg-secondary">
+                            Guardar y Enviar
                         </button>
                     </div>
                 </Modal>
+            )}
+
+            {/* Notificación flotante de sincronización en segundo plano */}
+            {syncNotification && (
+                <div className="fixed bottom-5 right-5 z-50 transition-all duration-300 transform">
+                    <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl border text-sm font-medium ${
+                        syncNotification.status === 'syncing' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+                        syncNotification.status === 'synced' ? 'bg-green-50 border-green-200 text-green-800' :
+                        'bg-red-50 border-red-200 text-red-800'
+                    }`}>
+                        {syncNotification.status === 'syncing' && (
+                            <svg className="animate-spin h-5 w-5 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                        )}
+                        {syncNotification.status === 'synced' && (
+                            <svg className="h-5 w-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                        )}
+                        {syncNotification.status === 'error' && (
+                            <svg className="h-5 w-5 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        )}
+                        <div>
+                            {syncNotification.status === 'syncing' && (
+                                <span>Sincronizando folio <strong>{syncNotification.folio}</strong> con Google Sheets...</span>
+                            )}
+                            {syncNotification.status === 'synced' && (
+                                <span>Folio <strong>{syncNotification.folio}</strong> guardado en Google Sheets con éxito.</span>
+                            )}
+                            {syncNotification.status === 'error' && (
+                                <div>
+                                    <p>Error al sincronizar folio <strong>{syncNotification.folio}</strong>: {syncNotification.message}</p>
+                                    {syncNotification.payload && (
+                                        <button 
+                                            onClick={() => syncToGoogleSheets(syncNotification.payload!)}
+                                            className="mt-1 underline font-bold hover:text-red-950 text-xs block"
+                                        >
+                                            Reintentar guardado ahora
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
         );

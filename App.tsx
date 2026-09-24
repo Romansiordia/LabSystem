@@ -182,6 +182,10 @@ const App: React.FC = () => {
     }
 
 
+    const handleUpdateAnalysis = (updated: Analysis) => {
+        setAnalyses(prev => prev.map(a => a.id === updated.id ? updated : a));
+    };
+
     const renderContent = () => {
         return (
             <ErrorBoundary>
@@ -211,7 +215,7 @@ const App: React.FC = () => {
                         case 'newAnalysis':
                             return <AnalysisRequest clients={clients} technicians={technicians} products={products} analysisCosts={analysisCosts} analyses={analyses} reloadData={reloadData} setActiveView={setActiveView} />;
                         case 'analyses':
-                            return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} />;
+                            return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} onUpdateAnalysis={handleUpdateAnalysis} />;
                         case 'analysisCosts':
                             return <AnalysisCostsManagement analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} />;
                         case 'products':
