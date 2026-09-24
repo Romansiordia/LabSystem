@@ -186,6 +186,11 @@ const App: React.FC = () => {
         setAnalyses(prev => prev.map(a => a.id === updated.id ? updated : a));
     };
 
+    const handleBatchUpdateAnalyses = (updatedList: Analysis[]) => {
+        const updateMap = new Map(updatedList.map(a => [a.id, a]));
+        setAnalyses(prev => prev.map(a => updateMap.get(a.id) || a));
+    };
+
     const handleAddAnalysis = (newAnalysis: Analysis) => {
         setAnalyses(prev => [newAnalysis, ...prev]);
     };
@@ -219,7 +224,7 @@ const App: React.FC = () => {
                         case 'newAnalysis':
                             return <AnalysisRequest clients={clients} technicians={technicians} products={products} analysisCosts={analysisCosts} analyses={analyses} reloadData={reloadData} setActiveView={setActiveView} onAddAnalysis={handleAddAnalysis} />;
                         case 'analyses':
-                            return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} products={products} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} onUpdateAnalysis={handleUpdateAnalysis} />;
+                            return <AnalysisManagement analyses={analyses} clients={clients} technicians={technicians} products={products} analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} setActiveView={setActiveView} onUpdateAnalysis={handleUpdateAnalysis} onBatchUpdateAnalyses={handleBatchUpdateAnalyses} />;
                         case 'analysisCosts':
                             return <AnalysisCostsManagement analysisCosts={analysisCosts} analysisTypes={analysisTypes} reloadData={reloadData} />;
                         case 'products':

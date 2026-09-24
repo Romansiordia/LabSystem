@@ -7,8 +7,9 @@ import Table from './ui/Table';
 import Modal from './ui/Modal';
 import StatusBadge from './ui/StatusBadge';
 import TestProgress from './ui/TestProgress';
-import { DownloadIcon, SheetIcon, PlusIcon, SearchIcon } from './icons/Icons';
+import { DownloadIcon, SheetIcon, PlusIcon, SearchIcon, UploadIcon } from './icons/Icons';
 import { ADM_LOGO_BASE64 } from './admLogo';
+import ImportResultsModal from './ImportResultsModal';
 
 const statusOptions: AnalysisStatus[] = ['Received', 'In Progress', 'Completed', 'Cancelled'];
 
@@ -22,13 +23,28 @@ interface AnalysisManagementProps {
     reloadData: () => Promise<void>;
     setActiveView: (view: View) => void;
     onUpdateAnalysis?: (updated: Analysis) => void;
+    onBatchUpdateAnalyses?: (updatedList: Analysis[]) => void;
 }
 
-const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clients, technicians, products, analysisCosts, analysisTypes, reloadData, setActiveView, onUpdateAnalysis }) => {
+const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ 
+    analyses, 
+    clients, 
+    technicians, 
+    products, 
+    analysisCosts, 
+    analysisTypes, 
+    reloadData, 
+    setActiveView, 
+    onUpdateAnalysis,
+    onBatchUpdateAnalyses 
+}) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAnalysis, setEditingAnalysis] = useState<Analysis | null>(null);
     const [modalFormData, setModalFormData] = useState<Partial<Analysis>>({});
     
+    // State for Import Results Modal (Excel/CSV)
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
     // State for Sample Details Editing Modal (Option B)
     const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
     const [editingSample, setEditingSample] = useState<Analysis | null>(null);
@@ -569,6 +585,13 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold text-gray-800">Analysis Management</h1>
                 <div className="flex items-center space-x-2">
+                    <button 
+                        onClick={() => setIsImportModalOpen(true)} 
+                        className="bg-indigo-600 text-white hover:bg-indigo-700 font-bold py-2 px-4 rounded-lg inline-flex items-center transition-colors shadow-sm"
+                        title="Importar resultados desde Excel (.xlsx, .xls) o CSV"
+                    >
+                        <UploadIcon /> <span className="ml-2">Importar Excel / CSV</span>
+                    </button>
                     <button onClick={handleDownloadPdf} className="bg-white text-gray-700 hover:bg-gray-100 border border-gray-300 font-bold py-2 px-4 rounded-lg inline-flex items-center transition-colors">
                         <DownloadIcon /> <span className="ml-2">Download PDF</span>
                     </button>
@@ -900,6 +923,22 @@ const AnalysisManagement: React.FC<AnalysisManagementProps> = ({ analyses, clien
                         </button>
                     </div>
                 </Modal>
+            )}
+
+            {/* Modal de Importación de Resultados desde Excel / CSV */}
+            {isImportModalOpen && (
+                <ImportResultsModal
+                    isOpen={isImportModalOpen}
+                    onClose={() => setIsImportModalOpen(false)}
+                    analyses={analyses}
+                    analysisCosts={analysisCosts}
+                    analysisTypes={analysisTypes}
+                    clients={clients}
+                    products={products}
+                    onBatchUpdateAnalyses={onBatchUpdateAnalyses}
+                    onUpdateAnalysis={onUpdateAnalysis}
+                    reloadData={reloadData}
+                />
             )}
 
             {/* Notificación flotante de sincronización en segundo plano */}
